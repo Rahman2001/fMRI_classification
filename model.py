@@ -18,7 +18,7 @@ class BaseModel(nn.Module, ABC):
     @property
     def device(self):
         return next(self.parameters()).device  # Returns the device on which the model is located
-
+    #
     def determine_shapes(self, encoder, dim):
         # Registers hooks to capture the input and output shapes of specific layers.
         def get_shape(module, input, output):
