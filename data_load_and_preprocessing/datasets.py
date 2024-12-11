@@ -63,3 +63,47 @@ class BaseDataset(Dataset):
             y = torch.cat([y, y1], dim=0)
             del y1
         return y
+
+
+class BNU_EOEC1(BaseDataset):
+    def __init__(self, **kwargs):
+        self.register_args(**kwargs)
+        self.root = r'C:\Users\Osman\Desktop\Data_Mining_2\project\datasets\Beijing_Normal_University_EOEC1'
+        self.meta_data = pd.read_csv(os.path.join(kwargs.get('base_path'), 'data', 'metadata', 'BNU_EOEC1.csv'))
+        self.data_dir = os.path.join(self.root, 'MNI_to_TRs')
+        self.subject_names = os.listdir(self.data_dir)
+        print(f'subject_names={self.subject_names}')
+        self.label_dict = {'open': torch.tensor([0.0]), 'closed': torch.tensor([1.0]),
+                           '22-25': torch.tensor([1.0, 0.0]),
+                           '26-30': torch.tensor([1.0, 0.0]),
+                           '31-35': torch.tensor([0.0, 1.0]), '36+': torch.tensor([0.0, 1.0])}  # torch.tensor([1])}
+        self.subject_folders = []
+        for i, subject in enumerate(os.listdir(self.data_dir)):
+            try:
+                age = torch.tensor(
+                    self.meta_data[self.meta_data['SUBID_SESSION'] == int(subject)]['AGE'].values[0])
+            except Exception:
+                print("Something is wrong with values in dataset in following attributes (subject_id or age)")
+
+            eoec = self.meta_data[self.meta_data['SUBID_SESSION'] == int(subject)]['EYESTATUS'].values[0]
+            path_to_TRs = os.path.join(self.data_dir, subject, self.norm)
+            subject_duration = len(os.listdir(path_to_TRs))  # 121
+            session_duration = subject_duration - self.sample_duration
+            filename = os.listdir(path_to_TRs)[0]
+            filename = filename[:filename.find('TR') + 3]
+
+            for k in range(0, session_duration, self.stride):
+                self.index_l.append((i, subject, path_to_TRs, filename + str(k), session_duration, age, eoec))
+
+    def __len__(self):
+        N = len(self.index_l)
+        return N
+
+    def __getitem__(self, index):
+        subj, subj_name, path_to_TRs, TR, session_duration, age, eoec = self.index_l[index]
+        age = self.label_dict[age] if isinstance(age, str) else age.float()
+        y = self.load_sequence(path_to_TRs, TR)
+        if self.augment is not None:
+            y = self.augment(y)
+        return {'fmri_sequence': y, 'subject': subj, 'subject_binary_classification': self.label_dict[eoec],
+                'subject_regression': age, 'TR': int(TR.split('_')[-1])}
