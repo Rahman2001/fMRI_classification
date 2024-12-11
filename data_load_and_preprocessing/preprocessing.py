@@ -28,3 +28,33 @@ def read_bnu(file_path, global_norm_path, per_voxel_norm_path, hand, count, queu
                    os.path.join(per_voxel_norm_path, 'rfMRI_' + hand + '_TR_' + str(i) + '.pt'))
     print('finished another subject. count is now {}'.format(count))
 
+def main():
+    bnu_path = r'C:\Users\Osman\Desktop\Data_Mining_2\project\datasets\Beijing_Normal_University_EOEC1'
+    # all_files_path = os.path.join(bnu_path, 'extract_bnu_data')
+    queue = Queue()
+    count = 0
+    for subj in os.listdir(bnu_path):
+        subj_path = os.path.join(bnu_path, subj, 'rest')
+        try:
+            file_path = os.path.join(subj_path, os.listdir(subj_path)[0])
+            print(f'file_path: {file_path}')
+            hand = file_path[file_path.find('rest.nii')]
+            print(f'hand: {hand[0]}')
+            global_norm_path = os.path.join(bnu_path, 'MNI_to_TRs', subj, 'global_normalize')
+            per_vox_norm_path = os.path.join(bnu_path, 'MNI_to_TRs', subj, 'per_voxel_normalize')
+            os.makedirs(global_norm_path, exist_ok=True)
+            os.makedirs(per_vox_norm_path, exist_ok=True)
+            count += 1
+            print('start working on subject ' + subj)
+            p = Process(target=read_bnu, args=(file_path, global_norm_path, per_vox_norm_path, hand, count, queue))
+            p.start()
+            if count % 20 == 0:
+                p.join()  # this blocks until the process terminates
+        except Exception:
+            print('encountered problem with ' + subj)
+            print(Exception)
+
+
+if __name__ == '__main__':
+    main()
+
