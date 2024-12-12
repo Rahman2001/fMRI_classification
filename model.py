@@ -1,4 +1,4 @@
-# Stage 2: Adding Helper Methods
+# Stage 3: Adding Save and Load Methods
 
 import os
 from abc import ABC, abstractmethod
@@ -18,7 +18,7 @@ class BaseModel(nn.Module, ABC):
     @property
     def device(self):
         return next(self.parameters()).device  # Returns the device on which the model is located
-    #
+
     def determine_shapes(self, encoder, dim):
         # Registers hooks to capture the input and output shapes of specific layers.
         def get_shape(module, input, output):
@@ -59,3 +59,59 @@ class BaseModel(nn.Module, ABC):
         self.intermediate_vec = intermediate_vec
         self.use_cuda = kwargs.get('cuda')
         self.shapes = kwargs.get('shapes')
+
+    def load_partial_state_dict(self, state_dict, load_cls_embedding):
+        # Loads parameters from a state_dict, handling mismatched parameters gracefully.
+        print('loading parameters onto new model...')
+        own_state = self.state_dict()
+        loaded = {name: False for name in own_state.keys()}
+        for name, param in state_dict.items():
+            if name not in own_state:
+                print('notice: {} is not part of new model and was not loaded.'.format(name))
+                continue
+            elif 'cls_embedding' in name and not load_cls_embedding:
+                continue
+            elif 'position' in name and param.shape != own_state[name].shape:
+                print('debug line above')
+                continue
+            param = param.data
+            own_state[name].copy_(param)
+            loaded[name] = True
+        for name, was_loaded in loaded.items():
+            if not was_loaded:
+                print('notice: named parameter - {} is randomly initialized'.format(name))
+
+    def save_checkpoint(self, directory, title, epoch, loss, accuracy, optimizer=None, schedule=None):
+        # Saves the current state of the model and optimizer.
+        # Updates the best model if the loss or accuracy improves.
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        # Build checkpoint dict to save.
+        ckpt_dict = {
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict() if optimizer is not None else None,
+            'epoch': epoch,
+            'loss_value': loss}
+        if accuracy is not None:
+            ckpt_dict['accuracy'] = accuracy
+        if schedule is not None:
+            ckpt_dict['schedule_state_dict'] = schedule.state_dict()
+            ckpt_dict['lr'] = schedule.get_last_lr()[0]
+        if hasattr(self, 'loaded_model_weights_path'):
+            ckpt_dict['loaded_model_weights_path'] = self.loaded_model_weights_path
+
+        # Save the file with specific name
+        core_name = title
+        name = "{}_last_epoch.pth".format(core_name)
+        torch.save(ckpt_dict, os.path.join(directory, name))
+        if self.best_loss > loss:
+            self.best_loss = loss
+            name = "{}_BEST_val_loss.pth".format(core_name)
+            torch.save(ckpt_dict, os.path.join(directory, name))
+            print('updating best saved model...')
+        if accuracy is not None and self.best_accuracy < accuracy:
+            self.best_accuracy = accuracy
+            name = "{}_BEST_val_accuracy.pth".format(core_name)
+            torch.save(ckpt_dict, os.path.join(directory, name))
+            print('updating best saved model...')
