@@ -27,7 +27,7 @@ class BaseModel(nn.Module, ABC):
 
         hook1 = encoder.down_block1.register_forward_hook(get_shape)
         hook2 = encoder.down_block3.register_forward_hook(get_shape)
-        input_shape = (1, 2,) + dim  # batch, norms, H, W, D, time +
+        input_shape = (1, 2,) + dim  # batch, norms, H, W, D, time ++
         x = torch.ones((input_shape))
         with torch.no_grad():
             encoder(x)
