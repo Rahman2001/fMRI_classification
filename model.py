@@ -150,3 +150,24 @@ class Encoder(BaseModel):
         x = self.down_block3(x)
         x = self.final_block(x)
         return x
+
+    class Decoder(BaseModel):
+        def __init__(self, **kwargs):
+            super(Decoder, self).__init__()
+            self.register_vars(**kwargs)
+            self.decode_block = nn.Sequential(OrderedDict([
+                ('upgreen0', UpGreenBlock(self.model_depth * 8, self.model_depth * 4, self.shapes['dim_2'],
+                                          self.dropout_rates['Up_green'])),
+                ('upgreen1', UpGreenBlock(self.model_depth * 4, self.model_depth * 2, self.shapes['dim_1'],
+                                          self.dropout_rates['Up_green'])),
+                ('upgreen2', UpGreenBlock(self.model_depth * 2, self.model_depth, self.shapes['dim_0'],
+                                          self.dropout_rates['Up_green'])),
+                ('blue_block', nn.Conv3d(self.model_depth, self.model_depth, kernel_size=3, stride=1, padding=1)),
+                ('output_block',
+                 nn.Conv3d(in_channels=self.model_depth, out_channels=self.outChannels, kernel_size=1, stride=1))
+            ]))
+
+        def forward(self, x):
+            x = self.decode_block(x)
+            return x
+
