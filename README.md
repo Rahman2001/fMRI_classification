@@ -16,6 +16,7 @@
 We currently support the following datasets
 * BNU EOEC1 - Beijing Normal University's Eye Open & Eye Closed fMRI (part 1) dataset
   * Follow instructions at [BNU link](https://rfmri.org/DownloadRfMRIMaps) and download the dataset
+  * Dataset contains total 48 subjects.
   * Preprocess the data by configuring the folders and run 'data_preprocess_and_load/preprocessing.main()'
 
 
