@@ -6,3 +6,12 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
+
+../experiments/BNU_EOEC1_fine_tune_binary_classification_07_12___04_27_48_BEST_val_accuracy.pth
+../experiments/BNU_EOEC1_fine_tune_binary_classification_07_12___04_27_48_BEST_val_loss.pth
+../experiments/BNU_EOEC1_fine_tune_binary_classification_07_12___04_27_48_last_epoch.pth
+
+../experiments/BNU_EOEC1_tranformer_reconstruction_03_12___13_44_35_BEST_val_loss.pth
+../experiments/BNU_EOEC1_tranformer_reconstruction_03_12___13_44_35_last_epoch.pth
+
+../venv
