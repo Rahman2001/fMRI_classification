@@ -1,11 +1,4 @@
-# Stage 3: Adding Save and Load Methods
 
-import os
-from abc import ABC, abstractmethod
-import torch
-from torch import nn
-
-import os
 import torch
 from torch import nn
 from abc import ABC, abstractmethod
@@ -27,25 +20,22 @@ class BaseModel(nn.Module, ABC):
         return next(self.parameters()).device  # Returns the device on which the model is located
 
     def determine_shapes(self, encoder, dim):
-        """
-        Registers hooks to capture the input and output shapes of specific layers.
-        """
+        """Registers hooks to capture the input and output shapes of specific layers."""
 
         def get_shape(module, input, output):
             module.input_shape = tuple(input[0].shape[-3:])
-            module.output_shape = tuple(output[0].shape[-3:])
-
-        input_shape = (1, 2, *dim)  # batch, norms, H, W, D, time ++
-        x = torch.ones(input_shape)
+            module.output_shape = tuple(output.shape[-3:])
 
         hooks = [
             encoder.down_block1.register_forward_hook(get_shape),
             encoder.down_block3.register_forward_hook(get_shape)
         ]
 
+        input_shape = (1, 2) + dim  # batch, channels, H, W, D, time ++
+        x = torch.ones(input_shape)
+
         with torch.no_grad():
             encoder(x)
-            del x
 
         self.shapes = {
             'dim_0': encoder.down_block1.input_shape,
@@ -58,18 +48,16 @@ class BaseModel(nn.Module, ABC):
             hook.remove()
 
     def register_vars(self, **kwargs):
-        """
-        Configures dropout rates and model parameters based on task type (e.g., fine-tuning or pretraining).
-        """
-        task_type = kwargs.get('task', 'pretrain')
+        """Configures model-specific parameters like dropout rates."""
+        intermediate_vec = 2640
+        task = kwargs.get('task', 'pretrain')
         self.dropout_rates = {
             'input': 0,
-            'green': 0.35 if task_type == 'fine_tune' else 0.2,
-            'Up_green': 0 if task_type == 'fine_tune' else 0.2,
+            'green': 0.35 if task == 'fine_tune' else 0.2,
+            'Up_green': 0 if task == 'fine_tune' else 0.2,
             'transformer': 0.1
         }
 
-        intermediate_vec = 2640
         self.BertConfig = BertConfig(
             hidden_size=intermediate_vec,
             vocab_size=1,
@@ -85,34 +73,70 @@ class BaseModel(nn.Module, ABC):
         self.model_depth = 4
         self.intermediate_vec = intermediate_vec
         self.use_cuda = kwargs.get('cuda', False)
-        self.shapes = kwargs.get('shapes')
+        self.shapes = kwargs.get('shapes', {})
 
     def load_partial_state_dict(self, state_dict, load_cls_embedding):
-        """
-        Loads parameters from a state_dict, handling mismatched parameters gracefully.
-        """
-        print('Loading parameters onto new model...')
+        """Loads parameters from a state_dict, handling mismatched parameters gracefully."""
+        print('Loading parameters onto the new model...')
         own_state = self.state_dict()
         loaded = {name: False for name in own_state.keys()}
 
         for name, param in state_dict.items():
             if name not in own_state:
-                print(f'Notice: {name} is not part of new model and was not loaded.')
+                print(f'Notice: {name} is not part of the new model and was not loaded.')
                 continue
-
             if 'cls_embedding' in name and not load_cls_embedding:
                 continue
-
             if 'position' in name and param.shape != own_state[name].shape:
+                print(f'Notice: Shape mismatch for {name}, skipping...')
                 continue
-
             own_state[name].copy_(param.data)
             loaded[name] = True
 
         for name, was_loaded in loaded.items():
             if not was_loaded:
-                print(f'Notice: named parameter - {name} is randomly initialized')
+                print(f'Notice: Named parameter {name} is randomly initialized.')
 
+    def save_checkpoint(self, directory, title, epoch, loss, accuracy=None, optimizer=None, schedule=None):
+        """
+        Saves the current state of the model and optimizer.
+        Updates the best model if the loss or accuracy improves.
+        """
+        os.makedirs(directory, exist_ok=True)
+
+        # Build checkpoint dict to save.
+        ckpt_dict = {
+            'model_state_dict': self.state_dict(),
+            'epoch': epoch,
+            'loss_value': loss
+        }
+
+        if optimizer:
+            ckpt_dict['optimizer_state_dict'] = optimizer.state_dict()
+        if accuracy is not None:
+            ckpt_dict['accuracy'] = accuracy
+        if schedule:
+            ckpt_dict.update({
+                'schedule_state_dict': schedule.state_dict(),
+                'lr': schedule.get_last_lr()[0]
+            })
+        if hasattr(self, 'loaded_model_weights_path'):
+            ckpt_dict['loaded_model_weights_path'] = self.loaded_model_weights_path
+
+        # Save the last checkpoint
+        torch.save(ckpt_dict, os.path.join(directory, f"{title}_last_epoch.pth"))
+
+        # Save the best checkpoint based on validation loss
+        if self.best_loss > loss:
+            self.best_loss = loss
+            torch.save(ckpt_dict, os.path.join(directory, f"{title}_BEST_val_loss.pth"))
+            print('Best validation loss model updated.')
+
+        # Save the best checkpoint based on validation accuracy
+        if accuracy is not None and self.best_accuracy < accuracy:
+            self.best_accuracy = accuracy
+            torch.save(ckpt_dict, os.path.join(directory, f"{title}_BEST_val_accuracy.pth"))
+            print('Best validation accuracy model updated.')
 
 class Encoder(BaseModel):
     def __init__(self, **kwargs):
